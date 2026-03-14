@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Datos sensibles — NO subir al repo
+data/pdfs_facturas/
+data/pdfs_certificados/
+data/excel_base/
+outputs/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Variables de entorno
+.env
+.env.*
+
+# Streamlit
+.streamlit/secrets.toml

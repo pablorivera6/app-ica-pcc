@@ -1,0 +1,21 @@
+# Extracción de PDFs
+pdfplumber>=0.10.0
+pypdf>=4.0.0
+pdf2image>=1.17.0
+pytesseract>=0.3.10
+
+# Procesamiento de datos
+pandas>=2.0.0
+openpyxl>=3.1.0
+numpy>=1.24.0
+
+# Interfaz visual (Fase futura)
+streamlit>=1.30.0
+
+# IA para PDFs complejos (opcional)
+anthropic>=0.25.0
+
+# Utilidades
+python-dotenv>=1.0.0
+rich>=13.0.0         # Logs bonitos en consola
+click>=8.1.0         # CLI
