@@ -75,6 +75,25 @@ class ResultadoCruce:
     diferencia_valor: float = 0.0
     observacion: str = ""
 
+    # Confianza y multi-factura
+    confianza: float = 0.0          # 0–100 — qué tan seguro es el match
+    facturas_multiple: list = field(default_factory=list)  # list[FacturaSIGO] si el cert cubre varias
+
+
+@dataclass
+class MunicipioICA:
+    """
+    Información tributaria de un municipio para liquidar el ICA.
+    """
+    nombre: str
+    departamento: str
+    periodicidad: str               # "ANUAL" | "TRIMESTRAL"
+    tarifa_por_mil: float           # Tarifa ICA en ‰ (milésimas)
+    aplica_avisos_tableros: bool    # 15% adicional sobre impuesto ICA
+    aplica_sobretasa_bomberil: bool # % adicional (varía por municipio)
+    fecha_limite_declaracion: str   # Texto descriptivo de vencimiento
+    verificado: bool = False        # True cuando la tarifa fue confirmada oficialmente
+
 
 @dataclass
 class DeclaracionICA:

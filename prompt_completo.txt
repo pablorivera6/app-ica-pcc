@@ -1,0 +1,9 @@
+PRIORIDAD 1: Reemplaza el extractor de certificados basado en regex por Claude API. Flujo: PDF a imagen con pdf2image, enviar imagen a Claude API usando claude-haiku-4-5, retornar JSON con: retenedor_nombre, retenedor_nit, ciudad_retencion, periodo_inicio, periodo_fin, base_gravable, tarifa_por_mil, valor_retenido, fecha_expedicion. Usar ANTHROPIC_API_KEY desde variable de entorno. Si falla hacer fallback al extractor regex.
+
+PRIORIDAD 2: Mejorar conciliador.py: matching por NIT mas periodo mas valor exacto sin tolerancias. Si el valor no coincide exactamente marcar como NO_COINCIDE. Detectar cuando un certificado cubre multiples facturas. Mostrar porcentaje de confianza del match en el reporte.
+
+PRIORIDAD 3: Crear tabla maestra de municipios en src/database/ con: nombre normalizado, departamento, periodicidad anual o trimestral, tarifa ICA por mil, si aplica avisos y tableros 15%, si aplica sobretasa bomberil, fecha limite de declaracion. Poblarla con los 60 municipios del Excel. Mostrarla en nueva pestana Municipios en la app.
+
+PRIORIDAD 4: Nueva pestana Declaraciones en Streamlit: seleccionar municipio y periodo, tomar base gravable del reporte de conciliacion, calcular impuesto base por tarifa, avisos y tableros si aplica, sobretasa bomberil si aplica, campos para retenciones y saldo a favor anterior, mostrar borrador completo, boton exportar en Excel.
+
+MEJORAS UI: mensajes de error claros para contabilidad, barra de progreso al procesar multiples PDFs, resumen visual con metricas grandes en pestana Conciliacion, modo claro como default.
