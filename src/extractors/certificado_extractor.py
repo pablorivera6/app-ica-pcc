@@ -128,7 +128,10 @@ def _dict_a_certificado(datos: dict, ruta: Path) -> CertificadoReteICA:
 # Función principal con fallback
 # ---------------------------------------------------------------------------
 
-def extraer_certificado(ruta_pdf: str | Path) -> CertificadoReteICA:
+def extraer_certificado(
+    ruta_pdf: str | Path,
+    raise_api_error: bool = False,
+) -> CertificadoReteICA:
     """
     Extrae los datos de un certificado de retención ICA desde un PDF.
 
@@ -136,7 +139,9 @@ def extraer_certificado(ruta_pdf: str | Path) -> CertificadoReteICA:
     Si falla o no hay API key, usa el extractor regex como fallback.
 
     Args:
-        ruta_pdf: Ruta al archivo PDF del certificado
+        ruta_pdf:        Ruta al archivo PDF del certificado
+        raise_api_error: Si True, re-lanza la excepción de Claude API en lugar
+                         de hacer fallback silencioso. Útil para depuración.
 
     Returns:
         CertificadoReteICA con los datos extraídos
@@ -147,9 +152,10 @@ def extraer_certificado(ruta_pdf: str | Path) -> CertificadoReteICA:
     if _get_api_key():
         try:
             datos = _extraer_con_claude_api(ruta)
-            cert = _dict_a_certificado(datos, ruta)
-            return cert
+            return _dict_a_certificado(datos, ruta)
         except Exception as e:
+            if raise_api_error:
+                raise
             print(f"⚠️  Claude API falló para {ruta.name}: {e} — usando extractor regex")
 
     # Fallback: extractor regex con pdfplumber

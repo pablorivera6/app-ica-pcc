@@ -181,11 +181,11 @@ with tab_cert:
                     tmp.write(archivo.read())
                     tmp_path = tmp.name
                 try:
-                    cert = extraer_certificado(tmp_path)
+                    cert = extraer_certificado(tmp_path, raise_api_error=True)
                     cert.archivo_origen = archivo.name
                     certificados.append(cert)
                 except Exception as e:
-                    errores.append(f"**{archivo.name}**: {e}")
+                    errores.append(f"**{archivo.name}** — `{type(e).__name__}: {e}`")
             progreso.empty()
 
             st.session_state["certificados"] = certificados
