@@ -161,6 +161,24 @@ with tab_cert:
                 "**En local:** Ejecuta `export ANTHROPIC_API_KEY=sk-ant-...` antes de iniciar la app."
             )
 
+        # ── Botón de prueba directa de la API ────────────────────────────
+        if key_activa and st.button("🧪 Probar conexión con Claude API"):
+            try:
+                import anthropic as _anthropic
+                _client = _anthropic.Anthropic(api_key=key_activa)
+                _resp = _client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=20,
+                    messages=[{"role": "user", "content": "Responde solo: OK"}],
+                )
+                st.success(f"✅ **API funciona correctamente.** Respuesta: `{_resp.content[0].text.strip()}`")
+            except Exception as _api_err:
+                st.error(
+                    f"❌ **Error de Claude API:**\n\n"
+                    f"`{type(_api_err).__name__}: {_api_err}`\n\n"
+                    "Esto explica por qué el extractor cae a Regex."
+                )
+
     archivos = st.file_uploader(
         "Selecciona PDFs de certificados",
         type=["pdf"],
