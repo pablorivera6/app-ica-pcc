@@ -47,63 +47,93 @@ def _get_api_key() -> Optional[str]:
 # PRIORIDAD 1 — Extractor con Claude API
 # ---------------------------------------------------------------------------
 
-def _extraer_con_claude_api(ruta_pdf: str | Path) -> dict:
-    """
-    Convierte el PDF a imagen y envía a Claude Haiku para extracción estructurada.
-    Retorna un dict con los campos del certificado.
-    Lanza excepción si falla (para que el caller haga fallback).
-    No requiere poppler — usa pdfplumber para extraer texto.
-    """
-    import anthropic
+_PROMPT_CAMPOS = (
+    "Eres un asistente contable colombiano especializado en certificados de retención ICA.\n"
+    "Extrae los siguientes campos y retorna ÚNICAMENTE un objeto JSON válido, "
+    "sin texto adicional ni bloques de código markdown.\n\n"
+    "{\n"
+    '  "retenedor_nombre": "nombre completo de la empresa que practica la retención",\n'
+    '  "retenedor_nit": "NIT con dígito de verificación formato XXXXXXXXXX-X",\n'
+    '  "ciudad_retencion": "ciudad donde se practicó la retención (solo nombre ciudad)",\n'
+    '  "periodo_inicio": "fecha inicio en formato DD/MM/YYYY o null",\n'
+    '  "periodo_fin": "fecha fin en formato DD/MM/YYYY o null",\n'
+    '  "base_gravable": 0,\n'
+    '  "tarifa_por_mil": 0,\n'
+    '  "valor_retenido": 0,\n'
+    '  "fecha_expedicion": "fecha en formato DD/MM/YYYY o null"\n'
+    "}\n\n"
+    "Notas:\n"
+    "- base_gravable y valor_retenido son enteros (sin puntos ni comas)\n"
+    "- tarifa_por_mil es el número de la tarifa en por mil (ej: si dice 7‰ → 7)\n"
+    "- Si un campo no aparece en el documento, usa null\n"
+)
 
-    ruta = Path(ruta_pdf)
 
-    # 1. Extraer texto con pdfplumber (sin dependencia de poppler)
-    with pdfplumber.open(ruta) as pdf:
-        texto = "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
-
-    if not texto:
-        raise ValueError(f"No se pudo extraer texto del PDF: {ruta.name}")
-
-    # 2. Llamada a Claude Haiku
-    client = anthropic.Anthropic(api_key=_get_api_key())
-
-    prompt = (
-        "Eres un asistente contable colombiano especializado en certificados de retención ICA.\n"
-        "Analiza el siguiente texto extraído de un certificado de retención ICA y extrae los campos.\n"
-        "Retorna ÚNICAMENTE un objeto JSON válido, sin texto adicional ni bloques de código.\n\n"
-        "Campos a extraer:\n"
-        "{\n"
-        '  "retenedor_nombre": "nombre completo de la empresa que practica la retención",\n'
-        '  "retenedor_nit": "NIT con dígito de verificación formato XXXXXXXXXX-X",\n'
-        '  "ciudad_retencion": "ciudad donde se practicó la retención (solo nombre ciudad)",\n'
-        '  "periodo_inicio": "fecha inicio en formato DD/MM/YYYY o null",\n'
-        '  "periodo_fin": "fecha fin en formato DD/MM/YYYY o null",\n'
-        '  "base_gravable": 0,\n'
-        '  "tarifa_por_mil": 0,\n'
-        '  "valor_retenido": 0,\n'
-        '  "fecha_expedicion": "fecha en formato DD/MM/YYYY o null"\n'
-        "}\n\n"
-        "Notas:\n"
-        "- base_gravable y valor_retenido son enteros (sin puntos ni comas)\n"
-        "- tarifa_por_mil es el número de la tarifa en por mil (ej: si dice 7‰ → 7)\n"
-        "- Si un campo no está disponible en el documento, usa null\n\n"
-        f"TEXTO DEL CERTIFICADO:\n{texto}"
-    )
-
+def _llamar_claude(client, messages: list) -> dict:
+    """Hace la llamada a Claude y parsea el JSON de respuesta."""
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
     )
+    texto_resp = response.content[0].text.strip()
+    if texto_resp.startswith("```"):
+        texto_resp = re.sub(r"```\w*\n?", "", texto_resp).strip()
+    return json.loads(texto_resp)
 
-    texto = response.content[0].text.strip()
 
-    # Limpiar bloques markdown si vienen envueltos
-    if texto.startswith("```"):
-        texto = re.sub(r"```\w*\n?", "", texto).strip()
+def _extraer_con_claude_api(ruta_pdf: str | Path) -> dict:
+    """
+    Extrae datos del certificado usando Claude API.
+    - Si el PDF tiene texto → envía el texto a Claude Haiku.
+    - Si el PDF es escaneado (sin texto) → convierte a imagen y usa la visión de Claude.
+    No requiere poppler.
+    """
+    import anthropic
+    import base64
+    import io as _io
 
-    return json.loads(texto)
+    ruta = Path(ruta_pdf)
+    client = anthropic.Anthropic(api_key=_get_api_key())
+
+    # 1. Intentar extracción de texto con pdfplumber
+    with pdfplumber.open(ruta) as pdf:
+        texto = "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
+
+    if len(texto) >= 50:
+        # PDF con capa de texto — enviar como texto plano
+        messages = [{
+            "role": "user",
+            "content": _PROMPT_CAMPOS + f"\nTEXTO DEL CERTIFICADO:\n{texto}",
+        }]
+        return _llamar_claude(client, messages)
+
+    # 2. PDF escaneado — convertir páginas a imagen y usar visión de Claude
+    imagenes_b64 = []
+    with pdfplumber.open(ruta) as pdf:
+        for page in pdf.pages[:3]:  # máximo 3 páginas
+            img = page.to_image(resolution=200)
+            buf = _io.BytesIO()
+            img.original.save(buf, format="PNG")
+            imagenes_b64.append(base64.standard_b64encode(buf.getvalue()).decode())
+
+    if not imagenes_b64:
+        raise ValueError(f"No se pudo extraer contenido del PDF: {ruta.name}")
+
+    # Construir mensaje multimodal (imagen + instrucción)
+    content = []
+    for b64 in imagenes_b64:
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/png", "data": b64},
+        })
+    content.append({
+        "type": "text",
+        "text": _PROMPT_CAMPOS + "\nAnaliza las imágenes del certificado y extrae los campos.",
+    })
+
+    messages = [{"role": "user", "content": content}]
+    return _llamar_claude(client, messages)
 
 
 def _dict_a_certificado(datos: dict, ruta: Path) -> CertificadoReteICA:
