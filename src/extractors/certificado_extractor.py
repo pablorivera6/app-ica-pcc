@@ -8,7 +8,9 @@ Estrategia (con fallback):
   2. Envía la imagen a Claude Haiku via API → JSON estructurado
   3. Si falla (sin API key, error de red, etc.) → fallback a extractor regex (pdfplumber)
 
-Requiere: ANTHROPIC_API_KEY en variables de entorno
+La API key se lee en este orden de prioridad:
+  1. st.secrets["ANTHROPIC_API_KEY"]  (Streamlit Cloud)
+  2. os.environ["ANTHROPIC_API_KEY"]  (local / Docker / CI)
 """
 import base64
 import io
@@ -21,6 +23,26 @@ from typing import Optional
 
 import pdfplumber
 from src.database.models import CertificadoReteICA
+
+
+# ---------------------------------------------------------------------------
+# Resolución de API key (entorno o Streamlit secrets)
+# ---------------------------------------------------------------------------
+
+def _get_api_key() -> Optional[str]:
+    """
+    Retorna la ANTHROPIC_API_KEY disponible, buscando en este orden:
+    1. st.secrets (Streamlit Cloud)
+    2. os.environ (local / Docker / CI)
+    """
+    try:
+        import streamlit as st
+        key = st.secrets.get("ANTHROPIC_API_KEY")
+        if key:
+            return key
+    except Exception:
+        pass
+    return os.environ.get("ANTHROPIC_API_KEY")
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +70,7 @@ def _extraer_con_claude_api(ruta_pdf: str | Path) -> dict:
     img_b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
 
     # 2. Llamada a Claude Haiku
-    client = anthropic.Anthropic()  # Usa ANTHROPIC_API_KEY del entorno
+    client = anthropic.Anthropic(api_key=_get_api_key())
 
     prompt = (
         "Eres un asistente contable colombiano especializado en certificados de retención ICA.\n"
@@ -138,7 +160,7 @@ def extraer_certificado(ruta_pdf: str | Path) -> CertificadoReteICA:
     ruta = Path(ruta_pdf)
 
     # Intentar con Claude API si hay API key disponible
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    if _get_api_key():
         try:
             datos = _extraer_con_claude_api(ruta)
             cert = _dict_a_certificado(datos, ruta)
