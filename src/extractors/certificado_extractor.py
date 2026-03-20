@@ -4,16 +4,14 @@ Extractor de certificados de retención de ICA.
 Los certificados NO tienen formato estándar — cada empresa emisora tiene su propio diseño.
 
 Estrategia (con fallback):
-  1. Convierte el PDF a imagen (pdf2image)
-  2. Envía la imagen a Claude Haiku via API → JSON estructurado
+  1. Extrae el texto del PDF con pdfplumber (sin poppler, compatible con Streamlit Cloud)
+  2. Envía el texto a Claude Haiku via API → JSON estructurado
   3. Si falla (sin API key, error de red, etc.) → fallback a extractor regex (pdfplumber)
 
 La API key se lee en este orden de prioridad:
   1. st.secrets["ANTHROPIC_API_KEY"]  (Streamlit Cloud)
   2. os.environ["ANTHROPIC_API_KEY"]  (local / Docker / CI)
 """
-import base64
-import io
 import json
 import os
 import re
@@ -54,27 +52,25 @@ def _extraer_con_claude_api(ruta_pdf: str | Path) -> dict:
     Convierte el PDF a imagen y envía a Claude Haiku para extracción estructurada.
     Retorna un dict con los campos del certificado.
     Lanza excepción si falla (para que el caller haga fallback).
+    No requiere poppler — usa pdfplumber para extraer texto.
     """
     import anthropic
-    from pdf2image import convert_from_path
 
     ruta = Path(ruta_pdf)
 
-    # 1. PDF → imagen (primera página, 200 dpi)
-    imagenes = convert_from_path(str(ruta), dpi=200, first_page=1, last_page=1)
-    if not imagenes:
-        raise ValueError(f"No se pudo convertir el PDF a imagen: {ruta.name}")
+    # 1. Extraer texto con pdfplumber (sin dependencia de poppler)
+    with pdfplumber.open(ruta) as pdf:
+        texto = "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
 
-    buf = io.BytesIO()
-    imagenes[0].save(buf, format="PNG")
-    img_b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+    if not texto:
+        raise ValueError(f"No se pudo extraer texto del PDF: {ruta.name}")
 
     # 2. Llamada a Claude Haiku
     client = anthropic.Anthropic(api_key=_get_api_key())
 
     prompt = (
         "Eres un asistente contable colombiano especializado en certificados de retención ICA.\n"
-        "Analiza esta imagen de un certificado de retención ICA y extrae los siguientes campos.\n"
+        "Analiza el siguiente texto extraído de un certificado de retención ICA y extrae los campos.\n"
         "Retorna ÚNICAMENTE un objeto JSON válido, sin texto adicional ni bloques de código.\n\n"
         "Campos a extraer:\n"
         "{\n"
@@ -91,26 +87,14 @@ def _extraer_con_claude_api(ruta_pdf: str | Path) -> dict:
         "Notas:\n"
         "- base_gravable y valor_retenido son enteros (sin puntos ni comas)\n"
         "- tarifa_por_mil es el número de la tarifa en por mil (ej: si dice 7‰ → 7)\n"
-        "- Si un campo no está disponible en el documento, usa null"
+        "- Si un campo no está disponible en el documento, usa null\n\n"
+        f"TEXTO DEL CERTIFICADO:\n{texto}"
     )
 
     response = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=512,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": img_b64,
-                    },
-                },
-                {"type": "text", "text": prompt},
-            ],
-        }],
+        messages=[{"role": "user", "content": prompt}],
     )
 
     texto = response.content[0].text.strip()
