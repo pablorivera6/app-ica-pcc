@@ -120,6 +120,47 @@ with tab_cert:
         "retenedor, ciudad, período y valores (fallback a regex si no hay conexión)."
     )
 
+    # ── Diagnóstico de API key ────────────────────────────────────────────
+    with st.expander("🔍 Diagnóstico — estado de la API key", expanded=True):
+        import os as _os
+
+        # 1. st.secrets
+        try:
+            key_secrets = st.secrets.get("ANTHROPIC_API_KEY", "")
+        except Exception as _e:
+            key_secrets = ""
+            st.caption(f"st.secrets no disponible: {_e}")
+
+        # 2. os.environ
+        key_env = _os.environ.get("ANTHROPIC_API_KEY", "")
+
+        def _mask(k: str) -> str:
+            return f"{k[:8]}…{k[-4:]}" if len(k) > 12 else ("(vacía)" if not k else k)
+
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            if key_secrets:
+                st.success(f"✅ **st.secrets** → `{_mask(key_secrets)}`")
+            else:
+                st.error("❌ **st.secrets** → no encontrada")
+        with col_d2:
+            if key_env:
+                st.success(f"✅ **os.environ** → `{_mask(key_env)}`")
+            else:
+                st.error("❌ **os.environ** → no encontrada")
+
+        key_activa = key_secrets or key_env
+        if key_activa:
+            st.info(f"🤖 Se usará **Claude API** (`{_mask(key_activa)}`)")
+        else:
+            st.warning(
+                "⚠️ **No se detectó ninguna API key.** "
+                "El extractor usará regex como fallback.\n\n"
+                "**En Streamlit Cloud:** Ve a *Settings → Secrets* y agrega:\n"
+                "```toml\nANTHROPIC_API_KEY = \"sk-ant-...\"\n```\n"
+                "**En local:** Ejecuta `export ANTHROPIC_API_KEY=sk-ant-...` antes de iniciar la app."
+            )
+
     archivos = st.file_uploader(
         "Selecciona PDFs de certificados",
         type=["pdf"],
