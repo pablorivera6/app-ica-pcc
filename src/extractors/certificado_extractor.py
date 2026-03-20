@@ -92,7 +92,7 @@ def _extraer_con_claude_api(ruta_pdf: str | Path) -> dict:
     )
 
     response = client.messages.create(
-        model="claude-haiku-4-5",
+        model="claude-haiku-4-5-20251001",
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}],
     )

@@ -185,7 +185,15 @@ with tab_cert:
                     cert.archivo_origen = archivo.name
                     certificados.append(cert)
                 except Exception as e:
-                    errores.append(f"**{archivo.name}** — `{type(e).__name__}: {e}`")
+                    msg = str(e)
+                    # Detectar si es error de modelo inválido para dar mensaje claro
+                    if "model" in msg.lower() and ("not found" in msg.lower() or "invalid" in msg.lower()):
+                        errores.append(
+                            f"**{archivo.name}** — Error en Claude API: modelo no reconocido. "
+                            f"Detalle: `{type(e).__name__}: {msg}`"
+                        )
+                    else:
+                        errores.append(f"**{archivo.name}** — `{type(e).__name__}: {msg}`")
             progreso.empty()
 
             st.session_state["certificados"] = certificados
